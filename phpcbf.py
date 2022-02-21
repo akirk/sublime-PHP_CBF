@@ -69,7 +69,7 @@ class PHP_CBF:
 
     if proc.returncode != 0:
       print('Invalid PHP');
-      self.window.status_message('Invalid PHP');
+      self.window.active_view().set_status('phpcbf', 'phpcbf(Invalid PHP)');
       return
 
     args = self.get_command_args('phpcbf')
@@ -84,7 +84,7 @@ class PHP_CBF:
     data = stdout.decode('utf-8')
 
     if proc.returncode > 2:
-      self.window.status_message('Error ' + data);
+      self.window.active_view().set_status('phpcbf', 'phpcbf(Error ' + data + ')');
       return
 
     if proc.returncode == 0:
@@ -100,18 +100,15 @@ class PHP_CBF:
 
     # If the length is way off there must have been an error
     if len(fixed_content) * 1.2 < len(content):
-      self.window.status_message('Error');
+      self.window.active_view().set_status('phpcbf', 'phpcbf(Error)');
       return
 
     # Get the diff between content and the fixed content.
     difftxt = self.run_diff(window, content, fixed_content)
     self.processed = True
-
+    self.window.active_view().set_status('phpcbf', '');
     if not difftxt:
       return
-
-    # Show diff text in the results panel.
-    self.window.status_message('');
 
     self.file_view.run_command('set_view_content', {'data':fixed_content, 'replace':True})
 
@@ -120,7 +117,7 @@ class PHP_CBF:
         a = origContent.splitlines()
         b = fixed_content.splitlines()
     except UnicodeDecodeError as e:
-        self.window.status_message("Diff only works with UTF-8 files")
+        self.window.active_view().set_status('phpcbf', 'phpcbf(Diff only works with UTF-8 files)')
         return
 
     # Get the diff between original content and the fixed content.
@@ -128,7 +125,6 @@ class PHP_CBF:
     difftxt = u"\n".join(line for line in diff)
 
     if difftxt == "":
-      self.window.status_message('')
       return
 
     return difftxt
@@ -163,7 +159,7 @@ class PHP_CBF:
       if settings.get('phpcs_standard'):
         args.append('--standard=' + standard)
       else:
-        args.append('--standard=${folder}/phpcs.xml')
+        args.append(sublime.expand_variables('--standard=${folder}/phpcs.xml',self.window.extract_variables()))
 
       args.append('-')
 
