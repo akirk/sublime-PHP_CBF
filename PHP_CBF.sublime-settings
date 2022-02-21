@@ -9,7 +9,7 @@
     "phpcbf_path": "phpcbf",
 
     // PHPCS Standard to Use. Can be a string or a dict (folder => standard).
-    "phpcs_standard": "Squiz",
+    "phpcs_standard": "",
 
     // Additional arguments to pass to PHPCS/PHPCBF.
     "additional_args": [],

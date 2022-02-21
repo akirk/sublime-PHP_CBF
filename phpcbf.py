@@ -3,7 +3,6 @@ import sublime
 import sublime_plugin
 import subprocess
 import difflib
-import threading
 
 """
 Set some constants
@@ -54,19 +53,55 @@ class PHP_CBF:
 
   def run(self, window , msg):
     self.window = window
-    cmd = 'phpcbf'
     content = window.active_view().substr(sublime.Region(0, window.active_view().size()))
 
-    tm = threading.Thread(target=self.loading_msg, args=([msg]))
-    tm.start()
+    args = self.get_command_args('phplint')
+    file_path = window.active_view().file_name()
 
-    t = threading.Thread(target=self.run_command, args=(self.get_command_args(cmd), cmd, content, window, window.active_view().file_name()))
-    t.start()
+    shell = False
+    if os.name == 'nt':
+      shell = True
+
+    proc = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+
+    stdout, stderr = proc.communicate(input=content.encode('utf-8'))
+    data = stdout.decode('utf-8')
+
+    if proc.returncode != 0:
+      print('Invalid PHP');
+      self.window.status_message('Invalid PHP');
+      return
+
+    args = self.get_command_args('phpcbf')
+    proc = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+
+    if file_path:
+      source = 'phpcs_input_file: ' + file_path + "\n" + content;
+    else:
+      source = content;
+
+    stdout, stderr = proc.communicate(input=source.encode('utf-8'))
+    data = stdout.decode('utf-8')
+
+    if proc.returncode > 2:
+      self.window.status_message('Error ' + data);
+      return
+
+    if proc.returncode == 0:
+      print('All good, nothing to fix');
+      return
+
+    self.process_phpcbf_results(data, window, content)
 
   def process_phpcbf_results(self, fixed_content, window, content):
     # Remove the gutter markers.
     self.window    = window
     self.file_view = window.active_view()
+
+    # If the length is way off there must have been an error
+    if len(fixed_content) * 1.2 < len(content):
+      self.window.status_message('Error');
+      return
 
     # Get the diff between content and the fixed content.
     difftxt = self.run_diff(window, content, fixed_content)
@@ -76,21 +111,16 @@ class PHP_CBF:
       return
 
     # Show diff text in the results panel.
-    self.set_status_msg('');
+    self.window.status_message('');
 
     self.file_view.run_command('set_view_content', {'data':fixed_content, 'replace':True})
-
-    # Fix on save (maybe loop issue)
-    if settings.get('fix_on_save') == True:
-      window.active_view().run_command('save')
-
 
   def run_diff(self, window, origContent, fixed_content):
     try:
         a = origContent.splitlines()
         b = fixed_content.splitlines()
     except UnicodeDecodeError as e:
-        sublime.status_message("Diff only works with UTF-8 files")
+        self.window.status_message("Diff only works with UTF-8 files")
         return
 
     # Get the diff between original content and the fixed content.
@@ -98,7 +128,7 @@ class PHP_CBF:
     difftxt = u"\n".join(line for line in diff)
 
     if difftxt == "":
-      sublime.status_message('')
+      self.window.status_message('')
       return
 
     return difftxt
@@ -111,7 +141,8 @@ class PHP_CBF:
     elif os.name == 'nt':
       args.append('php')
 
-    args.append(settings.get('phpcbf_path'))
+    if cmd_type == 'phpcbf':
+      args.append(settings.get('phpcbf_path'))
 
     standard_setting = settings.get('phpcs_standard')
     standard = ''
@@ -128,54 +159,21 @@ class PHP_CBF:
     else:
       standard = standard_setting
 
-    if settings.get('phpcs_standard'):
-      args.append('--standard=' + standard)
+    if cmd_type == 'phpcbf':
+      if settings.get('phpcs_standard'):
+        args.append('--standard=' + standard)
+      else:
+        args.append('--standard=${folder}/phpcs.xml')
 
-    args.append('-')
+      args.append('-')
+
+    if cmd_type == 'phplint':
+      args.append('-l')
 
     if settings.get('additional_args'):
       args += settings.get('additional_args')
 
     return args
-
-  def run_command(self, args, cmd, content, window, file_path):
-    shell = False
-    if os.name == 'nt':
-      shell = True
-
-    self.processed = False
-    proc = subprocess.Popen(args, shell=shell, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-
-    if file_path:
-      phpcs_content = 'phpcs_input_file: ' + file_path + "\n" + content;
-    else:
-      phpcs_content = content;
-
-    if proc.stdout:
-      data = proc.communicate(phpcs_content.encode('utf-8'))[0]
-
-      data = data.decode('utf-8')
-      sublime.set_timeout(lambda: self.process_phpcbf_results(data, window, content), 0)
-
-  def loading_msg(self, msg):
-    sublime.set_timeout(lambda: self.show_loading_msg(msg), 0)
-
-  def set_status_msg(self, msg):
-    sublime.status_message(msg)
-
-  def show_loading_msg(self, msg):
-    if self.processed == True:
-      return
-
-    msg = msg[:-2]
-    msg = msg + ' ' + self.process_anim[sublime.platform()][self.process_anim_idx]
-
-    self.process_anim_idx += 1;
-    if self.process_anim_idx > (len(self.process_anim[sublime.platform()]) - 1):
-      self.process_anim_idx = 0
-
-    self.set_status_msg(msg)
-    sublime.set_timeout(lambda: self.show_loading_msg(msg), 300)
 
 # Init PHPCBF.
 phpcbf = PHP_CBF()
@@ -196,7 +194,7 @@ class PhpcbfCommand(sublime_plugin.WindowCommand):
     phpcbf.run(self.window, 'Running PHPCS Fixer  ')
 
 class PhpcbfEventListener(sublime_plugin.EventListener):
-  def on_post_save(self, view):
+  def on_pre_save(self, view):
     self.filename = os.path.basename(view.file_name())
     if (
         self.filename.endswith('.php') == True and

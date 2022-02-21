@@ -7,7 +7,7 @@
         "caption": "PHP CBF: Settings",
         "command": "edit_settings", "args":
         {
-            "base_file": "${packages}/PHP CBF/PHP_CBF.sublime-settings",
+            "base_file": "${packages}/PHP_CBF/PHP_CBF.sublime-settings",
             "default": "${packages}/User/PHP_CBF.sublime-settings",
         }
     },

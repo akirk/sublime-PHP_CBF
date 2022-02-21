@@ -29,8 +29,8 @@
                         "caption": "PHP CBF",
                         "command": "edit_settings",
                         "args": {
-                            "base_file": "${packages}/PHP CBF/PHP_CBF.sublime-settings",
-                            "default": "${packages}/User/PHP_CBF.sublime-settings",
+                            "base_file": "${packages}/PHP_CBF/PHP_CBF.sublime-settings",
+                            "default": "// PHP CBF Settings - User\n{\n\t$0\n}\n",
                         }
                     }
                 ]
